@@ -41,7 +41,8 @@ elif cat /proc/version | grep -Eqi "centos|red hat|redhat"; then
 fi
 
 function install_trojan(){
-$systemPackage -y install net-tools
+systemctl stop nginx
+$systemPackage -y install net-tools socat
 Port80=`netstat -tlpn | awk -F '[: ]+' '$1=="tcp"{print $5}' | grep -w 80`
 Port443=`netstat -tlpn | awk -F '[: ]+' '$1=="tcp"{print $5}' | grep -w 443`
 if [ -n "$Port80" ]; then
@@ -119,6 +120,8 @@ elif [ "$release" == "ubuntu" ]; then
     systemctl stop ufw
     systemctl disable ufw
     apt-get update
+elif [ "$release" == "debian" ]; then
+    apt-get update
 fi
 $systemPackage -y install  nginx wget unzip zip curl tar >/dev/null 2>&1
 systemctl enable nginx
@@ -167,16 +170,20 @@ EOF
 	cd /usr/share/nginx/html/
 	wget https://github.com/atrandys/v2ray-ws-tls/raw/master/web.zip
     	unzip web.zip
-	systemctl start nginx
+	systemctl stop nginx
 	sleep 5
 	#申请https证书
+	if [ ! -d "/usr/src" ]; then
+	    mkdir /usr/src
+	fi
 	mkdir /usr/src/trojan-cert /usr/src/trojan-temp
 	curl https://get.acme.sh | sh
-	~/.acme.sh/acme.sh  --issue  -d $your_domain  --nginx
+	~/.acme.sh/acme.sh  --issue  -d $your_domain  --standalone
     	~/.acme.sh/acme.sh  --installcert  -d  $your_domain   \
         --key-file   /usr/src/trojan-cert/private.key \
         --fullchain-file /usr/src/trojan-cert/fullchain.cer
 	if test -s /usr/src/trojan-cert/fullchain.cer; then
+	systemctl start nginx
         cd /usr/src
 	#wget https://github.com/trojan-gfw/trojan/releases/download/v1.13.0/trojan-1.13.0-linux-amd64.tar.xz
 	wget https://api.github.com/repos/trojan-gfw/trojan/releases/latest
@@ -321,6 +328,15 @@ fi
 }
 
 function repair_cert(){
+systemctl stop nginx
+Port80=`netstat -tlpn | awk -F '[: ]+' '$1=="tcp"{print $5}' | grep -w 80`
+if [ -n "$Port80" ]; then
+    process80=`netstat -tlpn | awk -F '[: ]+' '$5=="80"{print $9}'`
+    red "==========================================================="
+    red "检测到80端口被占用，占用进程为：${process80}，本次安装结束"
+    red "==========================================================="
+    exit 1
+fi
 green "======================="
 blue "请输入绑定到本VPS的域名"
 blue "务必与之前失败使用的域名一致"
@@ -329,7 +345,7 @@ read your_domain
 real_addr=`ping ${your_domain} -c 1 | sed '1{s/[^(]*(//;s/).*//;q}'`
 local_addr=`curl ipv4.icanhazip.com`
 if [ $real_addr == $local_addr ] ; then
-    ~/.acme.sh/acme.sh  --issue  -d $your_domain  --nginx
+    ~/.acme.sh/acme.sh  --issue  -d $your_domain  --standalone
     ~/.acme.sh/acme.sh  --installcert  -d  $your_domain   \
         --key-file   /usr/src/trojan-cert/private.key \
         --fullchain-file /usr/src/trojan-cert/fullchain.cer
@@ -337,6 +353,7 @@ if [ $real_addr == $local_addr ] ; then
         green "证书申请成功"
 	green "请将/usr/src/trojan-cert/下的fullchain.cer下载放到客户端trojan-cli文件夹"
 	systemctl restart trojan
+	systemctl start nginx
     else
     	red "申请证书失败"
     fi
@@ -376,12 +393,16 @@ function update_trojan(){
 
 start_menu(){
     clear
-    green " ===================================="
+    green " ======================================="
     green " 介绍：一键安装trojan      "
     green " 系统：centos7+/debian9+/ubuntu16.04+"
     green " 网站：www.atrandys.com              "
     green " Youtube：Randy's 堡垒                "
-    green " ===================================="
+    blue " 声明："
+    red " *请不要在任何生产环境使用此脚本"
+    red " *请不要有其他程序占用80和443端口"
+    red " *若是第二次使用脚本，请先执行卸载trojan"
+    green " ======================================="
     echo
     green " 1. 安装trojan"
     red " 2. 卸载trojan"
