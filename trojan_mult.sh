@@ -198,9 +198,9 @@ After=network.target
 Type=simple  
 PIDFile=/usr/src/trojan/trojan/trojan.pid
 ExecStart=/usr/src/trojan/trojan -c "/usr/src/trojan/server.conf"  
-ExecReload=  
-ExecStop=kill -9 $(pidof /usr/src/trojan/trojan)  
-PrivateTmp=true  
+ExecReload=/bin/kill -HUP \$MAINPID
+Restart=on-failure
+RestartSec=1s
    
 [Install]  
 WantedBy=multi-user.target
@@ -209,6 +209,10 @@ EOF
 	chmod +x ${systempwd}trojan.service
 	systemctl start trojan.service
 	systemctl enable trojan.service
+	~/.acme.sh/acme.sh  --installcert  -d  $your_domain   \
+        --key-file   /usr/src/trojan-cert/private.key \
+        --fullchain-file /usr/src/trojan-cert/fullchain.cer \
+	--reloadcmd  "systemctl restart trojan"
 	green "======================================================================"
 	green "Trojan已安装完成，请使用以下链接下载trojan客户端，此客户端已配置好所有参数"
 	green "1、复制下面的链接，在浏览器打开，下载客户端，注意此下载链接将在1个小时后失效"
@@ -252,8 +256,8 @@ CHECK=$(grep SELINUX= /etc/selinux/config | grep -v "#")
 if [ "$CHECK" != "SELINUX=disabled" ]; then
     green "检测到SELinux开启状态，添加放行80/443端口规则"
     yum install -y policycoreutils-python >/dev/null 2>&1
-    semanage port -a -t http_port_t -p tcp 80
-    semanage port -a -t http_port_t -p tcp 443
+    semanage port -m -t http_port_t -p tcp 80
+    semanage port -m -t http_port_t -p tcp 443
 fi
 if [ "$release" == "centos" ]; then
     if  [ -n "$(grep ' 6\.' /etc/redhat-release)" ] ;then
@@ -268,8 +272,8 @@ if [ "$release" == "centos" ]; then
     red "==============="
     exit
     fi
-    firewall_status=`firewall-cmd --state`
-    if [ "$firewall_status" == "running" ]; then
+    firewall_status=`systemctl status firewalld | grep "Active: active"`
+    if [ -n "$firewall_status" ]; then
         green "检测到firewalld开启状态，添加放行80/443端口规则"
         firewall-cmd --zone=public --add-port=80/tcp --permanent
 	firewall-cmd --zone=public --add-port=443/tcp --permanent
@@ -296,6 +300,11 @@ elif [ "$release" == "ubuntu" ]; then
     fi
     apt-get update
 elif [ "$release" == "debian" ]; then
+    ufw_status=`systemctl status ufw | grep "Active: active"`
+    if [ -n "$ufw_status" ]; then
+        ufw allow 80/tcp
+        ufw allow 443/tcp
+    fi
     apt-get update
 fi
 $systemPackage -y install  nginx wget unzip zip curl tar >/dev/null 2>&1
@@ -333,6 +342,8 @@ fi
 
 function repair_cert(){
 systemctl stop nginx
+iptables -I INPUT -p tcp --dport 80 -j ACCEPT
+iptables -I INPUT -p tcp --dport 443 -j ACCEPT
 Port80=`netstat -tlpn | awk -F '[: ]+' '$1=="tcp"{print $5}' | grep -w 80`
 if [ -n "$Port80" ]; then
     process80=`netstat -tlpn | awk -F '[: ]+' '$5=="80"{print $9}'`
@@ -352,7 +363,8 @@ if [ $real_addr == $local_addr ] ; then
     ~/.acme.sh/acme.sh  --issue  -d $your_domain  --standalone
     ~/.acme.sh/acme.sh  --installcert  -d  $your_domain   \
         --key-file   /usr/src/trojan-cert/private.key \
-        --fullchain-file /usr/src/trojan-cert/fullchain.cer
+        --fullchain-file /usr/src/trojan-cert/fullchain.cer \
+	--reloadcmd  "systemctl restart trojan"
     if test -s /usr/src/trojan-cert/fullchain.cer; then
         green "证书申请成功"
 	green "请将/usr/src/trojan-cert/下的fullchain.cer下载放到客户端trojan-cli文件夹"
