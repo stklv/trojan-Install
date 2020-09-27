@@ -51,15 +51,22 @@ function install_wordpress(){
     if [ ! -f "/usr/share/wordpresstemp/latest-zh_CN.zip" ]; then
         red "我它喵的从github下载wordpress也失败了，请尝试手动安装……"
         green "从wordpress官网下载包然后命名为latest-zh_CN.zip，新建目录/usr/share/wordpresstemp/，上传到此目录下即可"
-    exit 1
+        exit 1
     fi
     green "==============="
     green " 1.安装必要软件"
     green "==============="
     sleep 1
+    green ""
     wget https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
     wget https://rpms.remirepo.net/enterprise/remi-release-7.rpm
-    rpm -Uvh remi-release-7.rpm epel-release-latest-7.noarch.rpm
+    if [ -f "epel-release-latest-7.noarch.rpm" -a -f "remi-release-7.rpm" ]; then
+        green "下载软件源成功"
+    else
+        red "下载软件源失败，退出安装"
+        exit 1
+    fi
+    rpm -Uvh remi-release-7.rpm epel-release-latest-7.noarch.rpm --force --nodeps
     #sed -i "0,/enabled=0/s//enabled=1/" /etc/yum.repos.d/epel.repo
     yum -y install  unzip vim tcl expect curl socat
     echo
@@ -85,7 +92,7 @@ function install_wordpress(){
     sleep 1
     #wget http://repo.mysql.com/mysql-community-release-el7-5.noarch.rpm
     wget https://repo.mysql.com/mysql80-community-release-el7-3.noarch.rpm
-    rpm -ivh mysql80-community-release-el7-3.noarch.rpm
+    rpm -ivh mysql80-community-release-el7-3.noarch.rpm --force --nodeps
     yum -y install mysql-server
     systemctl enable mysqld.service
     systemctl start  mysqld.service
@@ -158,12 +165,12 @@ EOT
     green "=========================================================================="
     echo
     green "=========================================================================="
-    green "Trojan已安装完成，请使用以下链接下载trojan客户端，此客户端已配置好所有参数"
-    blue "http://${your_domain}/$trojan_path/trojan-cli.zip"
+    green "Trojan已安装完成，请自行下载trojan客户端，使用以下的参数或配置文件"
+    green "服务器地址：$your_domain"
+    green "端口：443"
+    green "trojan密码：$trojan_passwd"
     green "=========================================================================="
-    green "                          客户端配置文件"
-    green "=========================================================================="
-    cat /usr/src/trojan-cli/config.json
+    cat /usr/src/trojan/config.json
     green "=========================================================================="
 }
 
@@ -208,17 +215,18 @@ EOF
     #wget https://github.com/atrandys/trojan/raw/master/fakesite.zip >/dev/null 2>&1
     #unzip fakesite.zip >/dev/null 2>&1
     #sleep 5
+    curl https://get.acme.sh | sh
     if [ ! -d "/usr/src" ]; then
         mkdir /usr/src
     fi
     if [ ! -d "/usr/src/trojan-cert" ]; then
-        mkdir /usr/src/trojan-cert /usr/src/trojan-temp
+        mkdir /usr/src/trojan-cert 
         mkdir /usr/src/trojan-cert/$your_domain
         if [ ! -d "/usr/src/trojan-cert/$your_domain" ]; then
             red "不存在/usr/src/trojan-cert/$your_domain目录"
             exit 1
         fi
-        curl https://get.acme.sh | sh
+        #curl https://get.acme.sh | sh
         ~/.acme.sh/acme.sh  --issue  -d $your_domain  --nginx
         if test -s /root/.acme.sh/$your_domain/fullchain.cer; then
             cert_success="1"
@@ -229,7 +237,7 @@ EOF
         now_time=`date +%s`
         minus=$(($now_time - $create_time ))
         if [  $minus -gt 5184000 ]; then
-            curl https://get.acme.sh | sh
+            #curl https://get.acme.sh | sh
             ~/.acme.sh/acme.sh  --issue  -d $your_domain  --nginx
             if test -s /root/.acme.sh/$your_domain/fullchain.cer; then
                 cert_success="1"
@@ -240,7 +248,7 @@ EOF
         fi        
     else 
         mkdir /usr/src/trojan-cert/$your_domain
-        curl https://get.acme.sh | sh
+        #curl https://get.acme.sh | sh
         ~/.acme.sh/acme.sh  --issue  -d $your_domain  --webroot /usr/share/nginx/html/
         if test -s /root/.acme.sh/$your_domain/fullchain.cer; then
             cert_success="1"
@@ -304,16 +312,16 @@ EOF
         tar xf trojan-${latest_version}-linux-amd64.tar.xz >/dev/null 2>&1
         rm -f trojan-${latest_version}-linux-amd64.tar.xz
         #下载trojan客户端
-        green "开始下载并处理trojan windows客户端"
-        wget https://github.com/atrandys/trojan/raw/master/trojan-cli.zip
-        wget -P /usr/src/trojan-temp https://github.com/trojan-gfw/trojan/releases/download/v${latest_version}/trojan-${latest_version}-win.zip
-        unzip trojan-cli.zip >/dev/null 2>&1
-        unzip /usr/src/trojan-temp/trojan-${latest_version}-win.zip -d /usr/src/trojan-temp/ >/dev/null 2>&1
-        mv -f /usr/src/trojan-temp/trojan/trojan.exe /usr/src/trojan-cli/
+        #green "开始下载并处理trojan windows客户端"
+        #wget https://github.com/atrandys/trojan/raw/master/trojan-cli.zip
+        #wget -P /usr/src/trojan-temp https://github.com/trojan-gfw/trojan/releases/download/v${latest_version}/trojan-${latest_version}-win.zip
+        #unzip trojan-cli.zip >/dev/null 2>&1
+        #unzip /usr/src/trojan-temp/trojan-${latest_version}-win.zip -d /usr/src/trojan-temp/ >/dev/null 2>&1
+        #mv -f /usr/src/trojan-temp/trojan/trojan.exe /usr/src/trojan-cli/
         green "请设置trojan密码，建议不要出现特殊字符"
         read -p "请输入密码 :" trojan_passwd
         #trojan_passwd=$(cat /dev/urandom | head -1 | md5sum | head -c 8)
-        cat > /usr/src/trojan-cli/config.json <<-EOF
+        cat > /usr/src/trojan/config.json <<-EOF
 {
     "run_type": "client",
     "local_addr": "127.0.0.1",
@@ -390,13 +398,14 @@ EOF
     }
 }
 EOF
-        cd /usr/src/trojan-cli/
-        zip -q -r trojan-cli.zip /usr/src/trojan-cli/
-        rm -rf /usr/src/trojan-temp/
-        rm -f /usr/src/trojan-cli.zip
-        trojan_path=$(cat /dev/urandom | head -1 | md5sum | head -c 16)
-        mkdir /usr/share/nginx/html/${trojan_path}
-        mv /usr/src/trojan-cli/trojan-cli.zip /usr/share/nginx/html/${trojan_path}/	
+        #cd /usr/src/trojan-cli/
+        #zip -q -r trojan-cli.zip /usr/src/trojan-cli/
+        #rm -rf /usr/src/trojan-temp
+        #rm -f /usr/src/trojan-cli.zip
+        #trojan_path=$(cat /dev/urandom | head -1 | md5sum | head -c 16)
+        #mkdir /usr/share/nginx/html/${trojan_path}
+        #mv /usr/src/trojan-cli/trojan-cli.zip /usr/share/nginx/html/${trojan_path}/	
+        #rm -f /usr/src/trojan-cli.zip
         cat > /etc/systemd/system/trojan.service <<-EOF
 [Unit]  
 Description=trojan  
@@ -462,7 +471,7 @@ function preinstall_check(){
             firewall-cmd --zone=public --add-port=443/tcp --permanent
             firewall-cmd --reload
         fi
-        rpm -Uvh http://nginx.org/packages/centos/7/noarch/RPMS/nginx-release-centos-7-0.el7.ngx.noarch.rpm
+        rpm -Uvh http://nginx.org/packages/centos/7/noarch/RPMS/nginx-release-centos-7-0.el7.ngx.noarch.rpm --force --nodeps
     else
             red "==============="
             red "当前系统不受支持"
@@ -590,13 +599,12 @@ function update_trojan(){
 start_menu(){
     clear
     green " ======================================="
-    green " 介绍: 一键安装trojan + wordpress      "
-    green " 系统: centos7+/debian9+/ubuntu16.04+"
-    green " 作者: A             "
-    blue " 注意:"
+    green " 脚本功用: 一键安装trojan + wordpress      "
+    green " 系统支持: centos7"
+    green " 脚本作者: atrandys             "
     red " *1. 不要在任何生产环境使用此脚本"
     red " *2. 不要占用80和443端口"
-    red " *3. 若第二次使用脚本，请先执行卸载trojan"
+    red " *3. 若第一次使用脚本失败，请先执行卸载trojan"
     green " ======================================="
     echo
     green " 1. 安装trojan + wp"
