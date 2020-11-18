@@ -244,8 +244,8 @@ EOF
         rm -rf /usr/src/trojan-temp/
         rm -f /usr/src/trojan-cli.zip
         trojan_path=$(cat /dev/urandom | head -1 | md5sum | head -c 16)
-        mkdir /usr/share/nginx/html/${trojan_path}
-        mv /usr/src/trojan-cli/trojan-cli.zip /usr/share/nginx/html/${trojan_path}/	
+        #mkdir /usr/share/nginx/html/${trojan_path}
+        #mv /usr/src/trojan-cli/trojan-cli.zip /usr/share/nginx/html/${trojan_path}/	
         cat > ${systempwd}trojan.service <<-EOF
 [Unit]  
 Description=trojan  
@@ -270,14 +270,15 @@ EOF
             --key-file   /usr/src/trojan-cert/$your_domain/private.key \
             --fullchain-file  /usr/src/trojan-cert/$your_domain/fullchain.cer \
             --reloadcmd  "systemctl restart trojan"	
-        green "=========================================================================="
-        green "Trojan已安装完成，请使用以下链接下载trojan客户端，此客户端已配置好所有参数"
-        blue "http://${your_domain}/$trojan_path/trojan-cli.zip"
-        green "=========================================================================="
+        green "==========================================================================="
+        green "windows客户端路径/usr/src/trojan-cli/trojan-cli.zip，此客户端已配置好所有参数"
+        green "==========================================================================="
+        echo
+        echo
         green "                          客户端配置文件"
-        green "=========================================================================="
+        green "==========================================================================="
         cat /usr/src/trojan-cli/config.json
-        green "=========================================================================="
+        green "==========================================================================="
     else
         red "==================================="
         red "https证书没有申请成功，本次安装失败"
@@ -309,11 +310,21 @@ function preinstall_check(){
     fi
     if [ -f "/etc/selinux/config" ]; then
         CHECK=$(grep SELINUX= /etc/selinux/config | grep -v "#")
-        if [ "$CHECK" != "SELINUX=disabled" ]; then
-            green "检测到SELinux开启状态，添加放行80/443端口规则"
-            yum install -y policycoreutils-python >/dev/null 2>&1
-            semanage port -a -t http_port_t -p tcp 80
-            semanage port -a -t http_port_t -p tcp 443
+        if [ "$CHECK" == "SELINUX=enforcing" ]; then
+            green "$(date +"%Y-%m-%d %H:%M:%S") - SELinux状态非disabled,关闭SELinux."
+            setenforce 0
+            sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/selinux/config
+            #loggreen "SELinux is not disabled, add port 80/443 to SELinux rules."
+            #loggreen "==== Install semanage"
+            #logcmd "yum install -y policycoreutils-python"
+            #semanage port -a -t http_port_t -p tcp 80
+            #semanage port -a -t http_port_t -p tcp 443
+            #semanage port -a -t http_port_t -p tcp 37212
+            #semanage port -a -t http_port_t -p tcp 37213
+        elif [ "$CHECK" == "SELINUX=permissive" ]; then
+            green "$(date +"%Y-%m-%d %H:%M:%S") - SELinux状态非disabled,关闭SELinux."
+            setenforce 0
+            sed -i 's/SELINUX=permissive/SELINUX=disabled/g' /etc/selinux/config
         fi
     fi
     if [ "$release" == "centos" ]; then
